@@ -1,0 +1,80 @@
+/*
+
+This CSS file will be included with your plugin, and
+available in the app when your plugin is enabled.
+
+If your plugin does not need CSS, delete this file.
+
+*/
+
+.chat-message-container {
+	/*position: absolute;*/
+	/*left: 0;*/
+	/*padding-right: 5px;*/
+	/*bottom: 100%;*/
+
+	position: absolute;
+	right: 0;
+	/*left: 0;*/
+	top: calc(-1 * var(--size-4-1) * var(--zoom-multiplier));
+	transform: translate(0, -100%) scale(var(--zoom-multiplier));
+	transform-origin: bottom right;
+	max-width: calc(100% / var(--zoom-multiplier));
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	/*color: var(--canvas-card-label-color);*/
+	--icon-size: 1em;
+	color: white;
+}
+
+.functions-div {
+	position: absolute;
+	bottom: -10px;
+	left: 0;
+	color: white;
+	transform-origin: top left;
+	transform: translate(0, 100%);
+}
+
+.chat-tools-container {
+	position: absolute;
+	top: 0;
+	min-height: 100%;
+	margin-top: auto;
+	margin-bottom: auto;
+	color: white;
+	z-index: 900;
+	right: calc(100% + 5px);
+}
+
+.chat-tools-container .chat-tools {
+	padding: 20px;
+}
+
+.chat-tools-container:not(:hover) {
+	width: 20px;
+	background: gray;
+}
+
+.chat-tools-container:not(:hover) .chat-tools {
+	display: none;
+}
+
+.chat-tools-container:hover {
+	margin-top: auto;
+	margin-bottom: auto;
+	background: green;
+}
+
+
+.download-code-button {
+	background: #4CAF50;
+	color: white;
+	padding: 10px;
+	border: none;
+	cursor: pointer;
+	position: absolute;
+	bottom: 0;
+	right: 0;
+}

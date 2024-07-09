@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>iframe</title>
+</head>
+<body>
+<script>
+	/**
+	 *
+	 * @param {string} input
+	 * @param {ExecutorStorage} storage
+	 * @returns {Promise<any>}
+	 */
+	let userCode = async function (input, storage) {
+		console.log('DEF: Executing user code with input', input);
+
+		const storedValue = await storage.get('key');
+		console.log('stored value:', storedValue);
+
+		await storage.set('key', storedValue + 1);
+	}
+
+	let storageEventId = 0;
+
+	/**
+	 * @type {Map<number, {resolve: (value: any) => void, reject: (reason: any) => void}>}
+	 */
+	const storageGetEventListeners = new Map();
+	/**
+	 * @type {Map<number, {resolve: () => void, reject: (reason: any) => void}>}
+	 */
+	const storageSetEventListeners = new Map();
+
+	/**
+	 * @type {ExecutorStorage}
+	 */
+	const storage = {
+		get: async (key) => {
+			const eventId = storageEventId++;
+			/**
+			 * @type {GetStorageValueMessage}
+			 */
+			const message = {
+				action: 'getStorageValue',
+				key,
+				id: eventId,
+			};
+
+			const promise = new Promise((resolve, reject) => {
+				storageGetEventListeners.set(eventId, {resolve, reject});
+			});
+
+			window.top.postMessage(message);
+
+			return promise;
+		},
+		set: async (key, value) => {
+			const eventId = storageEventId++;
+			/**
+			 * @type {SetStorageValueMessage}
+			 */
+			const message = {
+				action: 'setStorageValue',
+				key,
+				value,
+				id: eventId,
+			};
+
+			const promise = new Promise((resolve, reject) => {
+				storageSetEventListeners.set(eventId, {resolve, reject});
+			});
+
+			window.top.postMessage(message);
+
+			return promise;
+		},
+	};
+
+	window.addEventListener('message',
+		/**
+		 * @param {{data: ClientMessage}} event
+		 */
+		async function (event) {
+			const eventData = event.data;
+			console.log('received message from parent:', eventData);
+
+			switch (eventData.action) {
+				case 'setFunction':
+					const {value} = eventData;
+					userCode = new Function('return ' + value)();
+					break;
+				case 'callFunction':
+					const {input, id} = eventData;
+
+					try {
+						const result = await userCode(input, storage);
+
+						/**
+						 * @type {CallResponseMessage}
+						 */
+						const response = {
+							action: 'callResponse',
+							id,
+							success: true,
+							value: result,
+						};
+
+						window.top.postMessage(response);
+					} catch (e) {
+						/**
+						 * @type {CallResponseMessage}
+						 */
+						const response = {
+							action: 'callResponse',
+							id,
+							success: false,
+							error: `${e}`,
+						};
+
+						window.top.postMessage(response);
+					}
+					break;
+				case 'getStorageValueResponse': {
+					const listeners = storageGetEventListeners.get(eventData.id);
+					if (listeners) {
+						if (eventData.success) {
+							listeners.resolve(eventData.value);
+						} else {
+							listeners.reject(eventData.error);
+						}
+					}
+					break;
+				}
+				case 'setStorageValueResponse': {
+					const listeners = storageSetEventListeners.get(eventData.id);
+					if (listeners) {
+						if (eventData.success) {
+							listeners.resolve();
+						} else {
+							listeners.reject(eventData.error);
+						}
+					}
+					break;
+				}
+			}
+		});
+</script>
+</body>
+</html>

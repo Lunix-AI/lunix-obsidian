@@ -1,0 +1,11 @@
+{
+	"id": "lunix-obsidian",
+	"name": "Lunix",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Yet another AI plugin for Obsidian..",
+	"author": "Obsidian",
+	"authorUrl": "https://lunix.ai",
+	"fundingUrl": "https://github.com/sponsors/firtoz",
+	"isDesktopOnly": false
+}

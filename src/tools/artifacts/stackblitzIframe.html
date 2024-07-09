@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<!--suppress JSUnusedGlobalSymbols -->
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Dynamic React Component</title>
+	<script>
+		window.doEmbed = () => {};
+	</script>
+	<!-- IMPORTMAP -->
+</head>
+<body style="
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    overflow: hidden;
+">
+<div id="myDiv">
+	Preparing...
+
+	<br/>
+	<br/>
+
+	<button id="manual"
+			style="display: none;">
+		If the component doesn't load, click here to try again.
+	</button>
+</div>
+<script type="module">
+	window.nonce = 'INVALID_NONCE';
+	window.useTemplate = true;
+	window.componentCode = `import React from 'react';
+
+export default function App() {
+	return <h1>Hello, world!</h1>;
+}`;
+	window.defineComponentCode = (code) => {
+		window.componentCode = code;
+	};
+</script>
+<!-- MAIN_SCRIPT -->
+<script type="module">
+	import sdk from '@stackblitz/sdk';
+	import Babel from '@babel/standalone';
+	import jsxSyntaxPlugin from '@babel/plugin-syntax-jsx';
+
+	const usedImports = new Set();
+
+	// hijack console.log, error etc
+	const originals = ['log', 'error', 'warn', 'info', 'debug'].map((method) => {
+		const original = console[method];
+		console[method] = (...args) => {
+			original.apply(console, [
+				`[IFRAME] ${method.toUpperCase()}:`,
+				...args,
+			]);
+		};
+		return original;
+	});
+
+	/**
+	 * @returns {import('@babel/core').PluginObj}
+	 */
+	const importFirstPass = () =>
+		({
+			visitor: {
+				ImportDeclaration: (path) => {
+					let nodeSourceValue = path.node.source.value;
+					if (nodeSourceValue.startsWith("@/components/ui/")) {
+						nodeSourceValue = "shadcdn";
+						path.node.source.value = nodeSourceValue;
+					}
+
+					if (nodeSourceValue.startsWith(".")) {
+						return;
+					}
+
+					// if the import is pointing to a file in a dependency, we need to add the dependency to the project. e.g. "react-tabs/style/react-tabs.css" should add "react-tabs": "latest" to the dependencies.
+					if (nodeSourceValue.includes("/")) {
+						// if the source value starts with a @, e.g. @react-three/drei/something, we want to keep the @react-three/drei part.
+						if (nodeSourceValue.startsWith("@")) {
+							nodeSourceValue = `${nodeSourceValue.split("/")[0]}/${nodeSourceValue.split("/")[1]}`;
+						} else {
+							nodeSourceValue = nodeSourceValue.split("/")[0];
+						}
+					}
+
+					usedImports.add(nodeSourceValue);
+				},
+			},
+		});
+
+	const transformedCode = Babel.transform(window.componentCode, {
+		plugins: [
+			importFirstPass,
+			jsxSyntaxPlugin,
+		],
+	}).code;
+
+	const dependencies = {};
+
+	for (const importName of Array.from(usedImports)) {
+		switch (importName) {
+			case "@react-three/drei":
+				window.useTemplate = false;
+				dependencies[importName] = "^9.38.0";
+				break;
+			case "@react-three/fiber":
+				window.useTemplate = false;
+				dependencies[importName] = "^8.8.10";
+				break;
+			default:
+				dependencies[importName] = "latest";
+				break;
+		}
+	}
+
+	setTimeout(() => {
+		const manualButton = document.getElementById('manual');
+
+		if (manualButton) {
+			manualButton.style.display = 'block';
+			manualButton.onclick = () => {
+				window.doEmbed();
+			};
+		}
+	}, 1000);
+
+	window.doEmbed = () => {
+		if (window.useTemplate) {
+			document.getElementById('myDiv').innerHTML = `Embedding...`;
+
+			const nonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+			// Create the project payload.
+			/**
+			 * @type {import('@stackblitz/sdk').Project}
+			 */
+			const project = {
+				files: {
+					'index.html': `<head><script src="https://cdn.tailwindcss.com"><\/script></head><body><div id="root">Loading...</div></body>`,
+					'component.jsx': transformedCode,
+					'safe-component.jsx': `import React from 'react';
+	  // sometimes component.jsx has errors, so let's use lazy loading with error catching so we can display the error on the page instead
+      const Wrapper = React.lazy(() => import('./component.jsx').catch((error) => {
+		console.error('[IFRAME CONTENT] Error loading component.jsx:', error);
+		window.parent.parent.postMessage({
+				nonce: '${nonce}',
+			    source: 'WITHIN FRAME',
+				type: 'error',
+				error,
+			}, '*');
+		return {
+		  default: () => <h1 style={{color: 'red'}}>Error loading component.jsx: {error.message}</h1>
+		};
+	  }));
+
+	  export default Wrapper;
+				`,
+					'index.js': `
+      import React from 'react';
+      import ReactDom from 'react-dom/client';
+      import App from './safe-component.jsx';
+      const root = ReactDom.createRoot(document.getElementById('root'));
+      root.render(<App />);
+    `,
+					// 'randomFile.js': '// You should delete me.',
+				},
+				title: 'Artifacts Project',
+				description: 'This is a project created by the Artifacts tool.',
+				template: 'create-react-app',
+				dependencies: dependencies,
+				settings: {
+					compile: {
+						clearConsole: false,
+					}
+				}
+				// tags: ['stackblitz', 'sdk'],
+			};
+
+			// handle error messages from within the iframe
+			window.addEventListener('message', (event) => {
+				if (event.data.nonce !== nonce) {
+					return;
+				}
+
+				console.log('[IFRAME HOST] Received message:', event.data);
+				// if (event.data.type === 'error') {
+				// 	console.error(event.data.error);
+				// }
+
+				if(window.parent !== window.self) {
+					window.parent.postMessage({
+						nonce: window.nonce,
+						action: 'templateDidNotWork',
+					}, '*');
+				} else {
+					window.useTemplate = false;
+					window.doEmbed();
+				}
+			});
+
+			// Embed this project
+			sdk.embedProject('myDiv', project, {
+				openFile: 'component.jsx',
+				view: 'preview',
+				width: '100%',
+				height: '100%',
+			});
+		} else {
+			// use a more direct node style
+			const packageJson = JSON.stringify({
+				"name": "node-starter",
+				"version": "0.0.0",
+				"scripts": {
+					"start": "vite dev"
+				},
+				"dependencies": {
+					...dependencies,
+					"react": "latest",
+					"react-dom": "latest",
+				},
+				"devDependencies": {
+					"vite": "^5.3.3",
+					"@types/react": "^18.3.3",
+					"@types/react-dom": "^18.3.0",
+					"@vitejs/plugin-react": "^4.3.1",
+				},
+			}, null, 2);
+
+			const viteConfigString = `import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+})
+`;
+
+			const indexHTML = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + React</title>
+    <script src="https://cdn.tailwindcss.com"><\/script>
+  </head>
+  <body>
+    <div id="root">Loading...</div>
+    <script type="module" src="/src/main.jsx"><\/script>
+</body>
+</html>
+`;
+
+			const mainJsx = `import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './component.jsx'
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />)
+`
+
+			/**
+			 * @type {import('@stackblitz/sdk').Project}
+			 */
+			const project = {
+				title: 'Artifacts Project',
+				description: 'This is a project created by the Artifacts tool.',
+				template: 'node',
+				files: {
+					'package.json': packageJson,
+					'vite.config.js': viteConfigString,
+					'index.html': indexHTML,
+					'src/component.jsx': transformedCode,
+					'src/main.jsx': mainJsx,
+				},
+				settings: {
+					compile: {
+						clearConsole: false,
+					}
+				}
+			};
+
+			sdk.embedProject('myDiv', project, {
+				openFile: 'src/component.jsx',
+				height: '100%',
+				width: '100%',
+				view: 'preview',
+			});
+		}
+	}
+
+	window.doEmbed();
+</script>
+</body>
+</html>

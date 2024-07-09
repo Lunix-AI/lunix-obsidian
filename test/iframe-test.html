@@ -1,0 +1,474 @@
+<!-- in this file we'll test sending and receiving messages from an iframe. we'll have a button that'll add an iframe to the page with the desired code that can receive and send messages on demand -->
+<!DOCTYPE html>
+<!--suppress JSCheckFunctionSignatures -->
+<html lang="en">
+<head>
+	<title>iframe test</title>
+</head>
+<body>
+<button id="add-iframe">Safe Eval</button>
+<label>
+	<textarea id="function-code" style="width: 400px; height: 200px;">
+async (input, storage) => {
+	console.log('function executed', input);
+
+	const oldValue = await storage.get('key');
+	console.log('oldValue', oldValue);
+
+	await storage.set('key', input);
+
+	console.log('done');
+
+	return oldValue;
+}
+</textarea>
+	<textarea id="input-value" style="width: 400px; height: 200px;">5</textarea>
+</label>
+<script>
+	/**
+	 * @typedef {{
+	 * 		get: (key: string) => Promise<any>,
+	 * 		set: (key: string, value: any) => Promise<void>
+	 * }} ExecutorStorage
+	 */
+
+	/**
+		@typedef {{
+			action: 'setFunction',
+			value: string,
+		}} SetFunctionMessage
+	 */
+
+	/**
+		@typedef {{
+			action: 'callFunction',
+			id: number,
+			input: any,
+		}} CallFunctionMessage
+	 */
+
+	/**
+	 * @typedef {{
+	 *    action: 'getStorageValueResponse',
+	 *    id: number
+	 * } & ({
+	 *    success: true,
+	 *    value: any,
+	 * } | ({
+	 *    success: false,
+	 *    error: string,
+	 * }))} GetStorageValueResponseMessage
+	 */
+
+	/**
+	 * @typedef {{
+	 *   action: 'setStorageValueResponse',
+	 *   id: number,
+	 * } & ({
+	 *    success: true,
+	 * } | ({
+	 *    success: false,
+	 *    error: string,
+	 * }))} SetStorageValueResponseMessage
+	 */
+
+	/**
+	 * @typedef {SetFunctionMessage|CallFunctionMessage|GetStorageValueResponseMessage|SetStorageValueResponseMessage} ClientMessage
+	 */
+
+	/**
+	 *	@typedef {{
+	 *		action: 'callResponse',
+	 *		id: number,
+	 *	} & ({
+	 *    success: true,
+	 *    value: any,
+	 * } | ({
+	 *    success: false,
+	 *    error: string,
+	 * }))} CallResponseMessage
+	 */
+
+	/**
+		@typedef {{
+			action: 'getStorageValue',
+			id: number,
+			key: string,
+		}} GetStorageValueMessage
+	 */
+
+	/**
+	 * @typedef {{
+	 *     action: 'setStorageValue',
+	 *     id: number,
+	 *     key: string,
+	 *     value: any,
+	 * }} SetStorageValueMessage
+	 */
+
+	/**
+	 * @typedef {{
+	 *    action: 'iframeLoaded',
+	 * }} IframeLoadedMessage
+	 */
+
+	/**
+	 * @typedef {CallResponseMessage|GetStorageValueMessage|SetStorageValueMessage|IframeLoadedMessage} ServerMessage
+	 */
+
+	let messageId = 0;
+
+	/**
+	 * @type {Map<number, {resolve: (value: any) => void, reject: (reason: any) => void}>}
+	 */
+	const callResponseEventListeners = new Map();
+
+	/**
+	 * @param {number} id
+	 * @param {{resolve: (value: any) => void, reject: (reason: any) => void}} listener
+	 */
+	const addWindowResponseListener = (id, listener) => {
+		callResponseEventListeners.set(id, listener);
+	};
+
+	/**
+	 * @param {number} id
+	 */
+	const removeWindowResponseListener = (id) => {
+		callResponseEventListeners.delete(id);
+	};
+
+	const iframeLoadEventListeners = [];
+
+	const addOnLoadListener = (listener) => {
+		iframeLoadEventListeners.push(listener);
+	};
+
+	const removeOnLoadListener = (iframe) => {
+		iframeLoadEventListeners.splice(iframeLoadEventListeners.indexOf(iframe), 1);
+	};
+
+	/**
+	 *
+	 * @param {{
+	 * 	data: ServerMessage,
+	 * 	source: Window,
+	 * 	origin: string,
+	 * }} event
+	 */
+	const onWindowMessage = (event) => {
+		const eventData = event.data;
+
+		console.log('received message:', event);
+
+		switch (eventData.action) {
+			case 'callResponse':
+				const listener = callResponseEventListeners.get(eventData.id);
+				if (listener) {
+					if (eventData.success) {
+						listener.resolve(eventData.value);
+					} else {
+						listener.reject(eventData.error);
+					}
+				}
+				break;
+			case 'getStorageValue':
+				try {
+					// use local storage
+					const value = JSON.parse(localStorage.getItem(eventData.key) ?? 'null');
+					/**
+					 * @type {GetStorageValueResponseMessage}
+					 */
+					const message = {
+						action: 'getStorageValueResponse',
+						id: eventData.id,
+						success: true,
+						value,
+					};
+
+					event.source.postMessage(message, event.origin);
+				} catch (e) {
+					/**
+					 * @type {GetStorageValueResponseMessage}
+					 */
+					const message = {
+						action: 'getStorageValueResponse',
+						id: eventData.id,
+						success: false,
+						error: `${e}`,
+					};
+
+					event.source.postMessage(message, event.origin);
+				}
+				break;
+			case 'setStorageValue':
+				try {
+					// use local storage
+					localStorage.setItem(eventData.key, JSON.stringify(eventData.value));
+					/**
+					 * @type {SetStorageValueResponseMessage}
+					 */
+					const message2 = {
+						action: 'setStorageValueResponse',
+						id: eventData.id,
+						success: true,
+					};
+
+					event.source.postMessage(message2, event.origin);
+				} catch (e) {
+					/**
+					 * @type {SetStorageValueResponseMessage}
+					 */
+					const message2 = {
+						action: 'setStorageValueResponse',
+						id: eventData.id,
+						success: false,
+						error: `${e}`,
+					};
+
+					event.source.postMessage(message2, event.origin);
+				}
+				break;
+			case 'iframeLoaded':
+				iframeLoadEventListeners.forEach(listener => listener());
+				break;
+			default:
+				console.log('unknown action:', eventData.action);
+				break;
+		}
+	}
+
+	window.addEventListener('message', onWindowMessage);
+
+	/**
+	 * @param {HTMLIFrameElement} iframe
+	 * @param {any} input
+	 * @returns {Promise<unknown>}
+	 */
+	const executeMessage = async (iframe, input) => {
+		const id = messageId++;
+		/**
+		 * @type {CallFunctionMessage}
+		 */
+		const messageWithId = {
+			action: 'callFunction',
+			input,
+			id: id,
+		};
+
+		try {
+			return await new Promise((resolve, reject) => {
+				addWindowResponseListener(id, {
+					resolve,
+					reject,
+				});
+
+				iframe.contentWindow.postMessage(messageWithId);
+			});
+		} finally {
+			removeWindowResponseListener(id);
+		}
+	};
+
+	const functionCode = document.getElementById('function-code');
+	const inputValue = document.getElementById('input-value');
+
+	const iframeCode = () => {
+		/**
+		 *
+		 * @param {string} input
+		 * @param {ExecutorStorage} storage
+		 * @returns {Promise<any>}
+		 */
+		let userCode = async function (input, storage) {
+			console.log('DEF: Executing user code with input', input);
+
+			const storedValue = await storage.get('key');
+			console.log('stored value:', storedValue);
+
+			await storage.set('key', storedValue + 1);
+		}
+
+		let storageEventId = 0;
+
+		/**
+		 * @type {Map<number, {resolve: (value: any) => void, reject: (reason: any) => void}>}
+		 */
+		const storageGetEventListeners = new Map();
+		/**
+		 * @type {Map<number, {resolve: () => void, reject: (reason: any) => void}>}
+		 */
+		const storageSetEventListeners = new Map();
+
+		/**
+		 * @type {ExecutorStorage}
+		 */
+		const storage = {
+			get: async (key) => {
+				const eventId = storageEventId++;
+				/**
+				 * @type {GetStorageValueMessage}
+				 */
+				const message = {
+					action: 'getStorageValue',
+					key,
+					id: eventId,
+				};
+
+				const promise = new Promise((resolve, reject) => {
+					storageGetEventListeners.set(eventId, {resolve, reject});
+				});
+
+				window.top.postMessage(message);
+
+				return promise;
+			},
+			set: async (key, value) => {
+				const eventId = storageEventId++;
+				/**
+				 * @type {SetStorageValueMessage}
+				 */
+				const message = {
+					action: 'setStorageValue',
+					key,
+					value,
+					id: eventId,
+				};
+
+				const promise = new Promise((resolve, reject) => {
+					storageSetEventListeners.set(eventId, {resolve, reject});
+				});
+
+				window.top.postMessage(message);
+
+				return promise;
+			},
+		};
+
+		window.addEventListener('message',
+			/**
+			 * @param {{data: ClientMessage}} event
+			 */
+			async function (event) {
+				const eventData = event.data;
+				console.log('received message from parent:', eventData);
+
+				switch (eventData.action) {
+					case 'setFunction':
+						const {value} = eventData;
+						userCode = new Function('return ' + value)();
+						break;
+					case 'callFunction':
+						const {input, id} = eventData;
+
+						try {
+							const result = await userCode(input, storage);
+
+							/**
+							 * @type {CallResponseMessage}
+							 */
+							const response = {
+								action: 'callResponse',
+								id,
+								success: true,
+								value: result,
+							};
+
+							window.top.postMessage(response);
+						} catch (e) {
+							/**
+							 * @type {CallResponseMessage}
+							 */
+							const response = {
+								action: 'callResponse',
+								id,
+								success: false,
+								error: `${e}`,
+							};
+
+							window.top.postMessage(response);
+						}
+						break;
+					case 'getStorageValueResponse': {
+						const listeners = storageGetEventListeners.get(eventData.id);
+						if (listeners) {
+							if (eventData.success) {
+								listeners.resolve(eventData.value);
+							} else {
+								listeners.reject(eventData.error);
+							}
+						}
+						break;
+					}
+					case 'setStorageValueResponse': {
+						const listeners = storageSetEventListeners.get(eventData.id);
+						if (listeners) {
+							if (eventData.success) {
+								listeners.resolve();
+							} else {
+								listeners.reject(eventData.error);
+							}
+						}
+						break;
+					}
+				}
+			});
+	};
+
+	const safeEval = function (code, input) {
+		return new Promise((resolve, reject) => {
+			const iframe = document.createElement('iframe');
+			iframe.style.width = '400px';
+			iframe.style.height = '400px';
+			// iframe.src = 'iframe-content.html';
+			iframe.style.display = 'none';
+
+			document.body.appendChild(iframe);
+
+			const onLoaded = () => {
+				removeOnLoadListener(onLoaded);
+
+				iframe.contentWindow.postMessage({
+					action: 'setFunction',
+					value: code,
+				}, '*');
+
+				executeMessage(iframe, input)
+					.then(resolve)
+					.catch(reject)
+					.finally(() => {
+						iframe.remove();
+					});
+			};
+
+			addOnLoadListener(onLoaded);
+
+			iframe.contentWindow.document.open();
+			iframe.contentWindow.document.write(`
+			<!DOCTYPE html>
+			<html lang="en">
+			<head>
+				<title>iframe content</title>
+			</head>
+			<body onload="parent.postMessage({action: 'iframeLoaded'}, '*')">
+				<script>
+					(${iframeCode.toString()})();
+				<\/script>
+			</body>
+			</html>
+		`);
+			iframe.contentWindow.document.close();
+		});
+	}
+
+	document.getElementById('add-iframe')
+		.addEventListener('click', async () => {
+			try {
+				const result = await safeEval(functionCode.value, inputValue.value);
+				console.log('result:', result);
+			} catch (e) {
+				console.error(e);
+			}
+		});
+</script>
+</body>
