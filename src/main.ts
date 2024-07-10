@@ -88,12 +88,8 @@ import { isMainSelection } from "~/utils/isMainSelection";
 
 import process from "process";
 
-// window.process = {
-// 	...process,
-// 	...window.process,
-// };
-
 if (!window.process) {
+	// a workaround for Android which uses Capacitor and does not have a global process object, but it's necessary for some dependencies
 	window.process = process;
 }
 
@@ -628,8 +624,6 @@ export default class Lunix extends Plugin {
 					}
 				});
 
-				canvasLoaded({ canvas, file: canvasView.file! });
-
 				for (const item of Array.from(canvas.nodes.values())) {
 					this.nodeRender(item as CanvasTextNode<LunixNodeData>);
 				}
@@ -651,11 +645,6 @@ export default class Lunix extends Plugin {
 							console.log("Resetting canvas.");
 							canvas[ResetSymbol]();
 						}
-					});
-
-					canvasLoaded({
-						canvas,
-						file: canvasView.file!,
 					});
 
 					for (const item of Array.from(canvas.nodes.values())) {

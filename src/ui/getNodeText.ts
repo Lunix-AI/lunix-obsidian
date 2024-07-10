@@ -1,6 +1,5 @@
 import type { App, TFile } from "obsidian";
 import type { CanvasTextNode } from "~/shared/types";
-import type { AIEnabledNodeData } from "~/types/LunixNodeData";
 
 type FileProperties = Record<string, any>;
 

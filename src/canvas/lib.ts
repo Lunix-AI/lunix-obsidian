@@ -1,7 +1,7 @@
 // noinspection JSVoidFunctionReturnValueUsed
 
 import { around } from "monkey-around";
-import { type EventRef, Events, Menu, type Plugin, Point } from "obsidian";
+import type { Plugin } from "obsidian";
 import {
 	type Canvas,
 	type CanvasFileNode,
@@ -17,79 +17,8 @@ import {
 	type NodeInteractionLayerPrototype,
 	ResetSymbol,
 } from "~/shared/types";
-
-type PatchType<T> = T extends (...args: infer U) => infer V
-	? (original: T) => (...args: U) => V
-	: never;
-
-class TypedEvents<
-	TEvents extends {
-		[key: string]: (...args: any[]) => any;
-	},
-> extends Events {
-	private registerMap: {
-		[K in keyof TEvents & string]?: TEvents[K][];
-	} = {};
-
-	trigger<K extends keyof TEvents & string>(
-		event: K,
-		...args: Parameters<TEvents[K]>
-	) {
-		return super.trigger(event, ...args);
-	}
-
-	on<K extends keyof TEvents & string>(event: K, callback: TEvents[K]) {
-		this.registerMap[event] = this.registerMap[event] || [];
-		this.registerMap[event]!.push(callback);
-		const result = super.on(event, callback) as EventRef & {
-			e: {
-				offref: (ref: EventRef) => void;
-			};
-		};
-
-		return {
-			e: {
-				offref: (ref: EventRef) => {
-					result.e.offref(ref);
-					this.registerMap[event] = this.registerMap[event]!.filter(
-						(cb) => cb !== callback,
-					);
-					if (this.registerMap[event]!.length === 0) {
-						delete this.registerMap[event];
-					}
-				},
-			},
-		};
-	}
-
-	off<K extends keyof TEvents & string>(event: K, callback: TEvents[K]) {
-		if (this.registerMap[event]) {
-			this.registerMap[event] = this.registerMap[event]!.filter(
-				(cb) => cb !== callback,
-			);
-
-			if (this.registerMap[event]!.length === 0) {
-				delete this.registerMap[event];
-			}
-		}
-
-		return super.off(event, callback);
-	}
-
-	hasListeners<K extends keyof TEvents & string>(event: K) {
-		return this.registerMap[event] && this.registerMap[event]!.length > 0;
-	}
-}
-
-type Prefixed<T extends string, U extends string> = `${T}:${U}`;
-
-type FunctionKeys<T extends object> = {
-	[K in keyof T]: T[K] extends (...args: any[]) => any ? K : never;
-}[keyof T];
-
-type FunctionValues<T extends object> = {
-	[K in FunctionKeys<T>]: T[K];
-};
+import type { FunctionValues } from "~/utils/functionValues";
+import { TypedEvents } from "~/utils/typedEvents";
 
 type Params<T> = T extends (...args: infer U) => any ? U : never;
 type Return<T> = T extends (...args: any[]) => infer U ? U : never;
