@@ -19,5 +19,5 @@
 		},
 		"types": ["./src/defs.html.d.ts"]
 	},
-	"include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.html"]
+	"include": ["scripts/**/*.ts", "src/**/*.ts", "src/**/*.tsx", "src/**/*.html"]
 }
