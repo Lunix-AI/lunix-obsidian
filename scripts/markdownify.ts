@@ -12,6 +12,18 @@ function generateMarkdownFromDirectory(directoryPath: string): string {
 		gitignore = fs.readFileSync(gitignorePath, "utf8");
 	}
 
+	gitignore += `
+.git
+test
+.yarn
+.idea
+.gitignore
+*.md
+*.json
+*.html
+vite.config.js
+yarn.lock`;
+
 	// Create ignore instance
 	const ig = ignore().add(gitignore);
 
@@ -31,7 +43,7 @@ function generateMarkdownFromDirectory(directoryPath: string): string {
 				traverseDirectory(fullPath, relPath);
 			} else if (entry.isFile()) {
 				const fileContent = fs.readFileSync(fullPath, "utf8");
-				const fileExtension = path.extname(entry.name).slice(1);
+				const fileExtension = path.extname(fullPath).slice(1);
 
 				markdownContent += `${relPath}:\n\`\`\`${fileExtension}\n${fileContent}\n\`\`\`\n\n`;
 			}
@@ -52,6 +64,11 @@ const argv = await yargs(hideBin(process.argv))
 		type: "string",
 		demandOption: true,
 	})
+	.option("output", {
+		alias: "o",
+		describe: "Path to the output file",
+		type: "string",
+	})
 	.help("h")
 	.alias("h", "help")
 	.example("$0 -d ./my-project", "Generate markdown for ./my-project directory")
@@ -71,4 +88,10 @@ if (!fs.statSync(directoryPath).isDirectory()) {
 }
 
 const markdown = generateMarkdownFromDirectory(directoryPath);
-console.log(markdown);
+
+if (argv.output) {
+	fs.writeFileSync(argv.output, markdown);
+	console.log(`Markdown content written to ${argv.output}`);
+} else {
+	console.log(markdown);
+}
