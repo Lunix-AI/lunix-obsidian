@@ -1,4 +1,6 @@
-import { App, request } from "obsidian";
+// noinspection JSUnusedGlobalSymbols
+
+import { request } from "obsidian";
 import { z } from "zod";
 import { prepareToolConfig } from "~/toolConfig";
 import { withQueue } from "~/utils/queueManager";
@@ -169,6 +171,7 @@ type BraveSearchResponse =
 				url: string;
 				description: string;
 			}[];
+			notes: string;
 	  }
 	| {
 			success: false;
@@ -269,6 +272,8 @@ The news in Australia today is... [^source]
 							description: result.description,
 						};
 					}),
+					notes:
+						"Use the browse tool to dig deeper to as many results as necessary.",
 				};
 			} catch (e) {
 				console.error(e);
