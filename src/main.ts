@@ -39,7 +39,6 @@ import type { PerformAICompletionParams } from "~/ai/performAICompletionParams";
 import {
 	type CanvasEventTypes,
 	canvasEvents,
-	canvasLoaded,
 	extendCanvas,
 } from "~/canvas";
 import { getTokens } from "~/getTokens";
@@ -2166,7 +2165,7 @@ ${result.content}
 									},
 									name: toolInfo.tool.function.name,
 									description: toolInfo.tool.function.description,
-								} satisfies CompletionClientTool<any, any>;
+								} satisfies CompletionClientTool<unknown, unknown>;
 							}),
 				},
 				remainingFunctionCalls: 0,
