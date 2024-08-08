@@ -1921,7 +1921,20 @@ ${result.content}
 				model: "gpt-4o",
 				messages: messagesToUse,
 				stream: true,
-				tools: disableFunctions ? undefined : allTools.map(({ tool }) => tool),
+				tools: disableFunctions ? undefined : allTools.map(({ tool }) => {
+					// make sure tool description is max 1024 characters
+					const description = tool.function.description;
+					if (description && description.length > 1024) {
+						return {
+							...tool,
+							function: {
+								...tool.function,
+								description: description.slice(0, 1024),
+							},
+						};
+					}
+					return tool;
+				}),
 			};
 
 			const openai = new OpenAI({
